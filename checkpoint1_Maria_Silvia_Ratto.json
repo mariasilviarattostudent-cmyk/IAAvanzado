@@ -1,0 +1,701 @@
+{
+  "name": "Avanzado_Dolar_Minorista_Agente_M1",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 23,
+              "triggerAtMinute": 50
+            }
+          ]
+        }
+      },
+      "id": "e5c4265e-5373-4c74-a952-37877f4c8ab8",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://dolarapi.com/v1/dolares/oficial",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "89ebf05e-eb73-447d-8d10-71c6d7e5ad02",
+      "name": "HTTP Request - DolarAPI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "83983a31-5989-4982-a976-5e329975c643",
+              "name": "fecha",
+              "value": "={{ $json.fechaActualizacion.split('T')[0] }}",
+              "type": "string"
+            },
+            {
+              "id": "fcffd76a-1f47-4c4a-9084-b4f49c4d62d6",
+              "name": "valor_compra",
+              "value": "={{ Number($json.compra) }}",
+              "type": "number"
+            },
+            {
+              "id": "b7aa4cd9-cda5-451e-aa23-03409f59a6c6",
+              "name": "valor_venta",
+              "value": "={{ Number($json.venta) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ec73295a-1720-48ac-98eb-f1d752b9bff7",
+      "name": "Edit Fields - Cotización actual",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        448,
+        128
+      ],
+      "includeOtherFields": false
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hRc8hpv0uP4aHwbVEZ9OIRnPrWDvRyU2iIQvN0UOBu4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Hoja 1",
+          "mode": "name",
+          "cachedResultName": "Hoja 1",
+          "cachedResultUrl": ""
+        },
+        "options": {}
+      },
+      "id": "76e9c755-383c-4d78-ada4-81e25030e735",
+      "name": "Google Sheets - Get Row(s)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        448,
+        384
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YIpmCRSP6FrS7uXJ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "historial",
+        "options": {}
+      },
+      "id": "06065aa2-cc98-40fe-9e91-2f631c78a9fc",
+      "name": "Aggregate - Historial",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        672,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "id": "b3fe5451-0ca0-4c9a-bf5a-6b8e89200ced",
+      "name": "Merge - Cotización + historial",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        880,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const actual = $json;\nconst historial = Array.isArray($json.historial) ? $json.historial : [];\nconst fechaActual = actual.fecha;\nconst anteriores = historial.filter(r => r.fecha && r.fecha < fechaActual).sort((a,b) => String(b.fecha).localeCompare(String(a.fecha)));\nconst fechaExistente = historial.some(r => r.fecha === fechaActual);\nconst ultimosTres = anteriores.slice(0,3);\nconst anterior = anteriores[0];\nlet variacionPct = null;\nif (!fechaExistente && anterior && Number(anterior.valor_venta) > 0) { variacionPct = ((Number(actual.valor_venta)-Number(anterior.valor_venta))/Number(anterior.valor_venta))*100; }\nreturn { json: { fecha: actual.fecha, valor_compra: Number(actual.valor_compra), valor_venta: Number(actual.valor_venta), fecha_existente: fechaExistente, ultimos_tres: ultimosTres, venta_anterior: anterior ? Number(anterior.valor_venta) : null, variacion_pct: variacionPct, alerta_suba: variacionPct !== null && variacionPct >= 10 } };"
+      },
+      "id": "b5f70b59-6a62-4973-8c47-f2a176de6b05",
+      "name": "Code - Validar y comparar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7cbcf50d-e6cf-4a61-84ff-3c13939ecdf9",
+              "leftValue": "={{ $json.fecha_existente }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a4d6ccf4-80ed-4f88-a84d-8510c5242430",
+      "name": "IF - ¿Fecha ya existe?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1328,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "automationprocesos@gmail.com",
+        "subject": "=Cotización mayorista — fecha ya registrada: {{ $json.fecha }}",
+        "emailType": "text",
+        "message": "=La fecha {{ $json.fecha }} ya está registrada. No se agregó una fila duplicada.\n\nÚltimas cotizaciones anteriores disponibles:\n{{ $json.ultimos_tres.map(r => r.fecha + ': compra ' + r.valor_compra + ', venta ' + r.valor_venta).join('\\n') || 'No hay registros históricos anteriores disponibles.' }}",
+        "options": {}
+      },
+      "id": "ff6f8cd5-203d-4b08-b3a4-4a2c1013e2ea",
+      "name": "Gmail - Aviso de duplicado",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1552,
+        0
+      ],
+      "webhookId": "a62e70bd-9fff-479a-9d19-607d9350c7ef",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ELKhTmZhmFGJ8DL9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1hRc8hpv0uP4aHwbVEZ9OIRnPrWDvRyU2iIQvN0UOBu4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Hoja 1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fecha": "={{ $json.fecha }}",
+            "valor_compra": "={{ $json.valor_compra }}",
+            "valor_venta": "={{ $json.valor_venta }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "fecha",
+              "displayName": "fecha",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "valor_compra",
+              "displayName": "valor_compra",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "valor_venta",
+              "displayName": "valor_venta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "b729f2e5-c12e-4993-969b-a920c0383a28",
+      "name": "Google Sheets - Append Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1552,
+        304
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YIpmCRSP6FrS7uXJ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Code - Validar y comparar').item.json.variacion_pct }}",
+                    "rightValue": 10,
+                    "operator": {
+                      "type": "number",
+                      "operation": "gte"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Suba >= 10%"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Code - Validar y comparar').item.json.variacion_pct }}",
+                    "rightValue": 10,
+                    "operator": {
+                      "type": "number",
+                      "operation": "lt"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Suba < 10%"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3528a961-c875-47f5-8027-5bb1346a2cbf",
+      "name": "Switch - ¿Suba >= 10%?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1760,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "automationprocesos@gmail.com",
+        "subject": "=ALERTA: suba del dólar oficial/minorista igual o superior al 10%",
+        "emailType": "text",
+        "message": "=Se detectó una suba del precio de venta del dólar oficial/minorista.\nFecha: {{ $('Code - Validar y comparar').item.json.fecha }}\nVenta anterior: {{ $('Code - Validar y comparar').item.json.venta_anterior }}\nVenta actual: {{ $('Code - Validar y comparar').item.json.valor_venta }}\nVariación: {{ Number($('Code - Validar y comparar').item.json.variacion_pct).toFixed(2) }}%\n\nÚltimas cotizaciones anteriores:\n{{ $('Code - Validar y comparar').item.json.ultimos_tres.map(r => r.fecha + ': compra ' + r.valor_compra + ', venta ' + r.valor_venta).join('\\n') || 'No hay registros históricos anteriores disponibles.' }}",
+        "options": {}
+      },
+      "id": "e7f118fe-3003-421f-b3fb-f018f47fabaa",
+      "name": "Gmail - Alerta de suba",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2000,
+        224
+      ],
+      "webhookId": "14365e49-0ece-4e69-9466-fb19e77f4c55",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ELKhTmZhmFGJ8DL9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "automationprocesos@gmail.com",
+        "subject": "=Nueva cotización oficial registrada: {{ $('Code - Validar y comparar').item.json.fecha }}",
+        "emailType": "text",
+        "message": "=Se registró una nueva cotización del dólar oficial/minorista.\nFecha: {{ $('Code - Validar y comparar').item.json.fecha }}\nCompra: {{ $('Code - Validar y comparar').item.json.valor_compra }}\nVenta: {{ $('Code - Validar y comparar').item.json.valor_venta }}\n{{ $('Code - Validar y comparar').item.json.variacion_pct === null ? 'No hay cotización anterior disponible para calcular la variación.' : 'Variación respecto de la cotización anterior: ' + Number($('Code - Validar y comparar').item.json.variacion_pct).toFixed(2) + '%' }}\n\nÚltimas cotizaciones anteriores:\n{{ $('Code - Validar y comparar').item.json.ultimos_tres.map(r => r.fecha + ': compra ' + r.valor_compra + ', venta ' + r.valor_venta).join('\\n') || 'No hay registros históricos anteriores disponibles.' }}",
+        "options": {}
+      },
+      "id": "4626e368-c1e8-418a-a959-eee9d485d6ba",
+      "name": "Gmail - Resumen diario",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2000,
+        384
+      ],
+      "webhookId": "45e9736a-ad61-41e8-bad9-fa694f0e71ea",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ELKhTmZhmFGJ8DL9",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "c076f1e6-88b2-41e6-a11b-a2f43321ade9",
+      "name": "Chat Trigger - Consultar cotización",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        720
+      ],
+      "webhookId": "6c0c1c59-2aa3-4c08-b99b-8c85e39b308c"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "## 1. ROL\nSos un asistente especializado en el análisis de la cotización del dólar oficial/minorista en Argentina.\n\n## 2. OBJETIVOS\n- Responder consultas sobre la cotización y su evolución.\n- Consultar el historial de cotizaciones mediante la herramienta de Google Sheets conectada cuando la consulta requiera datos históricos.\n- Explicar las variaciones entre períodos utilizando datos verificables.\n\n## 3. REGLAS DE OPERACIÓN\n- Respondé en español, con claridad, precisión y prudencia.\n- Basá las respuestas sobre datos históricos exclusivamente en la información devuelta por la herramienta de Google Sheets.\n- Diferenciá siempre los valores de compra y venta.\n- Cuando calcules una variación porcentual, indicá el período analizado, los valores utilizados y la fórmula aplicada.\n- Si los datos son insuficientes, están incompletos o no se pueden verificar, indicá expresamente esa limitación.\n- Utilizá la herramienta cuando sea necesaria para responder; no afirmes haberla consultado si no se ejecutó correctamente.\n\n## 4. LÍMITES\n- No inventes cotizaciones, fechas, tendencias ni registros faltantes.\n- No presentes estimaciones como datos reales.\n- No tomes decisiones financieras ni formules recomendaciones de inversión.\n- No afirmes haber validado datos, evitado duplicados o enviado alertas desde el chat. Esas tareas corresponden a la automatización determinista existente.\n\n## 5. FORMATO DE RESPUESTA\nRespondé de manera concisa y organizada. Cuando corresponda y los datos estén disponibles, incluí la fecha, el valor de compra, el valor de venta y la variación porcentual. Si no podés responder con evidencia suficiente, explicá qué información falta.",
+          "maxIterations": 6
+        }
+      },
+      "id": "83cba344-fe95-4469-b60d-a53e41a82aa9",
+      "name": "AI Agent - Analista de cotización",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        512,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hRc8hpv0uP4aHwbVEZ9OIRnPrWDvRyU2iIQvN0UOBu4",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1550772354,
+          "mode": "list",
+          "cachedResultName": "Hoja 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hRc8hpv0uP4aHwbVEZ9OIRnPrWDvRyU2iIQvN0UOBu4/edit#gid=1550772354"
+        },
+        "options": {}
+      },
+      "id": "51f6bc3b-db17-44cb-b5df-0f23b8db5eee",
+      "name": "Google Sheets Tool - Consultar historial",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        960
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YIpmCRSP6FrS7uXJ",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-5-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        928
+      ],
+      "id": "657e9fa2-8749-43a2-a611-d12c0eae9f0a",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": null,
+          "name": "",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "automationprocesos@gmail.com",
+        "subject": "REPORTE DE OBSERVABILIDAD — AGENTE DÓLAR M1",
+        "message": "={{ $json.output }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        720
+      ],
+      "id": "a295f7a4-e2ba-4e62-b449-03b5d5941b76",
+      "name": "Send a message",
+      "webhookId": "56c3e4d5-006d-4658-a505-c35f6f562a24",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ELKhTmZhmFGJ8DL9",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request - DolarAPI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request - DolarAPI": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields - Cotización actual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields - Cotización actual": {
+      "main": [
+        [
+          {
+            "node": "Merge - Cotización + historial",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Google Sheets - Get Row(s)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Get Row(s)": {
+      "main": [
+        [
+          {
+            "node": "Aggregate - Historial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate - Historial": {
+      "main": [
+        [
+          {
+            "node": "Merge - Cotización + historial",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge - Cotización + historial": {
+      "main": [
+        [
+          {
+            "node": "Code - Validar y comparar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Validar y comparar": {
+      "main": [
+        [
+          {
+            "node": "IF - ¿Fecha ya existe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - ¿Fecha ya existe?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Aviso de duplicado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Google Sheets - Append Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets - Append Row": {
+      "main": [
+        [
+          {
+            "node": "Switch - ¿Suba >= 10%?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - ¿Suba >= 10%?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Alerta de suba",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gmail - Resumen diario",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Trigger - Consultar cotización": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Analista de cotización",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Tool - Consultar historial": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent - Analista de cotización",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent - Analista de cotización",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Analista de cotización": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "5e999c3a-2778-467f-a9d2-66fb45da0aab",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "001fdf16d23267f958d7c13bffc1e6c794781e06d9bbbbbfb5056dde8ebb3f69"
+  },
+  "nodeGroups": [],
+  "id": "V79BqsFgt07JP0kt",
+  "tags": []
+}
